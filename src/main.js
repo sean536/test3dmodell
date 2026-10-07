@@ -27,13 +27,15 @@ document.querySelectorAll('.project-categories button').forEach((button, index) 
 });
 const dialog = document.querySelector('#inquiry');
 const inquire = document.querySelector('#inquire');
-inquire.addEventListener('click', () => dialog.showModal());
+let inquiryOrigin = inquire;
+inquire.addEventListener('click', () => { inquiryOrigin = inquire; dialog.showModal(); });
+document.querySelector('#hero-inquire').addEventListener('click', event => { inquiryOrigin = event.currentTarget; dialog.showModal(); });
 document.querySelector('#close-dialog').addEventListener('click', () => dialog.close());
-dialog.addEventListener('close', () => inquire.focus());
+dialog.addEventListener('close', () => inquiryOrigin.focus());
 document.querySelector('#inquiry-form').addEventListener('submit', event => {
   event.preventDefault();
   const data = new FormData(event.currentTarget);
-  const text = `PROJEKTANFRAGE\n\nProjekt:\n${data.get('project')}\n\nKontakt:\n${data.get('email')}\n\nEntwurf — nicht versendet. FORM / WERK ist ein fiktives Designkonzept.\n`;
+  const text = `PROJEKTANFRAGE\n\nProjekt:\n${data.get('project')}\n\nKontakt:\n${data.get('email')}\n\nEntwurf — nicht versendet. FORMWERK ist ein fiktives Designkonzept.\n`;
   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url;

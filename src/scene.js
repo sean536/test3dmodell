@@ -5,6 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { intro } from './intro.js';
+import { buildStoryTimeline, updateStory, STORY_DURATION } from './story.js';
 import { inspectGLB } from './model-inspection.js';
 import { buildCameraPath, CAMERA_DIRECTION } from './camera-path.js';
 
@@ -22,7 +23,7 @@ export async function initScene() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#111210');
   const camera = new THREE.PerspectiveCamera(42);
-  const motion = { progress: 0, scroll: 0 };
+  const motion = { progress: 0, scroll: 0, story: -1 };
   const mouse = new THREE.Vector2();
   const offset = new THREE.Vector2();
   const resources = { geometries: new Set(), materials: new Set(), textures: new Set() };
@@ -32,7 +33,7 @@ export async function initScene() {
   let frame = 0, lastFrame = 0, renderCount = 0, slowFrames = 0;
   let disposed = false, completed = false, visible = true, previewHeld = false, awaitingHomepage = false;
   let projectionShift = NaN;
-  let scrollOffset = 0;
+  let scrollOffset = 0, displayedStory = -2, storyTravelling = false;
   const diagnostics = { ready: false, phase: 'loading', renderCount: 0 };
   window.cinematicDiagnostics = diagnostics;
   const observer = new IntersectionObserver(entries => {
@@ -62,7 +63,7 @@ export async function initScene() {
     delete window.cinematicPreview;
   }
   function fail(message, error) {
-    dispose(); diagnostics.phase = 'fallback';
+    dispose(); updateStory(-1); diagnostics.phase = 'fallback';
     document.body.classList.remove('has-model');
     state.hidden = false; state.textContent = message;
     intro.reveal({ instant: true });
@@ -92,7 +93,7 @@ export async function initScene() {
   }
   function finish() {
     if (!completed) awaitingHomepage = true;
-    completed = true; motion.progress = 1;
+    completed = true; motion.progress = 1; motion.story = -1;
     synchronize();
   }
   function motionPreference() {
@@ -105,7 +106,7 @@ export async function initScene() {
     const active = !document.hidden && visible;
     if (!active) { cancelAnimationFrame(frame); frame = 0; lastFrame = 0; timeline?.pause(); diagnostics.paused = true; return; }
     diagnostics.paused = false;
-    if (!completed && !previewHeld && !reduced.matches && !mobile.matches) {
+    if (renderCount > 0 && !completed && !previewHeld && !reduced.matches && !mobile.matches) {
       timeline?.resume();
     }
     if (!frame) frame = requestAnimationFrame(render);
@@ -121,7 +122,7 @@ export async function initScene() {
     path.positionCurve.getPoint(motion.progress, cameraPosition);
     path.targetCurve.getPoint(motion.progress, cameraTarget);
     // Pointer and scroll influence begin only as the composition withdraws from the steel.
-    const revealBlend = THREE.MathUtils.smoothstep(motion.progress, .67, 1);
+    const revealBlend = THREE.MathUtils.smoothstep(motion.progress, .82, 1);
     cameraPosition.x += offset.x * path.size.x * revealBlend;
     cameraPosition.y += offset.y * path.size.y * revealBlend + scrollOffset * path.size.y * .025 * revealBlend;
     camera.position.copy(cameraPosition); camera.lookAt(cameraTarget);
@@ -130,11 +131,19 @@ export async function initScene() {
       camera.setViewOffset(container.clientWidth, container.clientHeight, -container.clientWidth * shift, still && camera.aspect < 1 ? container.clientHeight * .10 : 0, container.clientWidth, container.clientHeight);
       projectionShift = shift;
     }
+    if (displayedStory !== motion.story) { displayedStory = motion.story; updateStory(motion.story); }
+    const travelling = motion.story < 0 && Math.abs(motion.progress * 5 - Math.round(motion.progress * 5)) > 1e-5;
+    if (travelling !== storyTravelling) {
+      storyTravelling = travelling;
+      document.querySelector('#story').dataset.travelling = String(travelling);
+    }
     const start = performance.now(); renderer.render(scene, camera);
     const renderMs = performance.now() - start;
     if (awaitingHomepage) { awaitingHomepage = false; intro.reveal({ instant: reduced.matches }); }
     slowFrames = renderMs > 90 ? slowFrames + 1 : Math.max(0, slowFrames - 1);
-    Object.assign(diagnostics, { renderCount: ++renderCount, progress: motion.progress, completed, position: camera.position.toArray(), target: cameraTarget.toArray(), drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, textures: renderer.info.memory.textures, renderSubmitMs: renderMs, phase: still ? 'still' : completed ? 'reveal' : 'film' });
+    Object.assign(diagnostics, { renderCount: ++renderCount, progress: motion.progress, story: motion.story, filmDuration: STORY_DURATION, completed, position: camera.position.toArray(), target: cameraTarget.toArray(), drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, textures: renderer.info.memory.textures, renderSubmitMs: renderMs, phase: still ? 'still' : completed ? 'reveal' : 'film' });
+    // Begin narrative time only after the pure architectural first frame is submitted.
+    if (renderCount === 1 && !still && !completed && !previewHeld) timeline?.resume();
     if (slowFrames > 12) { fail('Die 3D-Ansicht wurde aus Leistungsgründen pausiert. Alle Inhalte bleiben verfügbar.'); return; }
     const moving = !still && ((!completed && !previewHeld) || offset.distanceToSquared(mouse) > 1e-9 || Math.abs(scrollOffset - desiredScroll) > 1e-4);
     if (moving) frame = requestAnimationFrame(render);
@@ -208,8 +217,7 @@ export async function initScene() {
     if (reduced.matches || mobile.matches) finish();
     else {
       timeline = gsap.timeline({ paused: true, onComplete: finish });
-      timeline.to(motion, { progress: 0, duration: CAMERA_DIRECTION.openingHold });
-      CAMERA_DIRECTION.segments.forEach((duration, index) => timeline.to(motion, { progress: (index + 1) / CAMERA_DIRECTION.segments.length, duration, ease: 'sine.inOut' }));
+      buildStoryTimeline(timeline, motion);
     }
     scrollTrigger = ScrollTrigger.create({ trigger: hero, start: 'top top', end: 'bottom top', onUpdate: self => { motion.scroll = reduced.matches || !intro.unlocked ? 0 : self.progress; synchronize(); } });
     observer.observe(hero);
@@ -220,7 +228,8 @@ export async function initScene() {
     reduced.addEventListener('change', motionPreference); mobile.addEventListener('change', motionPreference);
     window.addEventListener('homepage-ready', homepageReady);
     if (import.meta.env.DEV) window.cinematicPreview = {
-      seek(progress) { previewHeld = true; timeline?.pause(); motion.progress = THREE.MathUtils.clamp(progress, 0, 1); completed = motion.progress === 1; if (completed) awaitingHomepage = true; synchronize(); },
+      seek(progress) { previewHeld = true; timeline?.pause(); motion.progress = THREE.MathUtils.clamp(progress, 0, 1); motion.story = -1; completed = motion.progress === 1; if (completed) awaitingHomepage = true; synchronize(); },
+      shot(index) { previewHeld = true; timeline?.pause(); motion.progress = index / 5; motion.story = index < 5 ? index : -1; completed = index === 5; if (completed) awaitingHomepage = true; synchronize(); },
       resume() { previewHeld = false; awaitingHomepage = false; if (!completed) timeline?.resume(); synchronize(); },
     };
     console.info('Measured staircase GLB:', stats);

@@ -55,17 +55,11 @@ No exact duplicate complete geometries or encoded images were found. Decoded thu
 
 ## Camera and light changes
 
-`src/camera-path.js` replaces the five provisional box-fraction shots with five measured waypoints and two continuous centripetal Catmull–Rom curves (position and look target). It identifies the actual upper-flight frame and tread meshes by name and measures their transformed bounds. It chooses an actual rail-junction vertex near the foot of that flight:
+The current six-destination company presentation is documented in [STORYBOARD.md](STORYBOARD.md). It retains measured normalization, lighting, material maps and the existing camera/render system. Camera positions and targets use actual transformed upper-flight, tread and platform bounds plus actual steel vertices. Position and target follow continuous centripetal Catmull–Rom splines; a smooth exterior-plane constraint keeps the camera outside the steel. No model rotation, scene swaps or black fades.
 
-**(-0.410371, 1.292703, -0.224200)** in original source world coordinates.
+The film takes 22.1 seconds, followed by the existing 1.9-second homepage reveal. The final full-assembly camera framing remains bounds/FOV/aspect-derived. Near/far planes still derive from clearance, normalized bounds and fitted camera distance. The current route was checked at 512 samples/segments against the actual triangles for desktop, intermediate and portrait aspect ratios; no intersections were detected, and opening/final bounding corners fit the frustum. Sampling does not prove exhaustive continuous collision freedom.
 
-The current opening establishes the actual upper-flight architecture, moves close alongside its rail for foreground parallax, withdraws to a full-assembly approach and gently pushes in for the final homepage composition. Four eased traversals and a 0.4-second hold take **11.8 seconds**. The existing continuous camera/target spline remains; no scene swaps, model rotations, OrbitControls or black fades are used. The camera-framing margin is 1.04 rather than 1.16, so the final staircase occupies more of the viewport.
-
-All positions/targets derive from the real frame/tread/assembly bounds or the real junction vertex. Full reveal distance is fitted to projected bounding-box corners, field of view and aspect ratio. Near plane derives from rail clearance and model diagonal; far plane includes the reveal distance and full model depth. A 512-sample route check found **≥0.1972 source units** of clearance outside the assembly's leftmost X plane, so the camera cannot enter the steel at those samples. This conservative plane bound is stronger than only checking the selected flight; it is not an exhaustive continuous triangle collision proof.
-
-Desktop framing moves gently right during arrival, reserving the existing left-side editorial space. No site UI is visible during the camera journey. Only after the final frame is rendered does the company identity appear; navigation starts 0.65 seconds later, service labels and the single project CTA at 0.9 seconds, then interaction and scrolling unlock at 1.9 seconds. Total default desktop opening is **13.7 seconds after asset readiness**. Initial HTML scroll lock and body `inert`, hidden lower sections and captured input prevent early interaction. `src/intro.js` owns this state transition. Mobile uses a still full-assembly fallback and the short UI reveal; reduced-motion users get the final composition and immediate unlock. The same scene remains behind the hero. After unlock, ordinary scrolling reaches the unchanged lower sections and mouse influence remains restrained.
-
-`src/scene.js` owns loading, measured normalization, renderer, light rig, animation, scroll, lifecycle and diagnostics. `CAMERA_DIRECTION` in `src/camera-path.js` controls route proportions, framing and segment timing. `LIGHTING` in `src/scene.js` controls exposure and intensities.
+`src/scene.js` owns loading, normalization, lighting, rendering, lifecycle and diagnostics; `src/camera-path.js` owns geometry-derived camera destinations; `src/story.js` owns stop timing and caption state. The company statistics and named references are explicitly fictional demonstration content, never verified client relationships.
 
 Two directional lights placed relative to the measured model bounds provide a neutral warm key and restrained cool rim. Hemisphere fill and a small generated room environment retain dark steel structure while supplying metal reflections. Source color/metal/roughness maps are preserved; tread normal-map strength is reduced to 0.5, frame normal maps to 0.8, to control harsh highlight noise. No real-time shadows or post-processing.
 
@@ -77,7 +71,7 @@ Validation evidence lives in `/workspace/evidence/staircase/`. Static syntax and
 
 Browser uses the cloud's software graphics path: submission-time diagnostics are **not** hardware GPU profiling or proof of smooth MacBook performance.
 
-Remaining performance risks: ~59 MiB texture residency, high-DPR antialiased framebuffer cost, double-sided fragment work, first-load JPEG/PNG decode/shader compilation, visible 1K texture softness in macro shots. No unsafe shader or high-resolution HDRI was added. Real MacBook/mobile hardware profiling remains needed. Vite retains its >500 kB scene-chunk warning (~711 kB uncompressed / ~200 kB gzip).
+Remaining performance risks: ~59 MiB texture residency, high-DPR antialiased framebuffer cost, double-sided fragment work, first-load JPEG/PNG decode/shader compilation, visible 1K texture softness in macro shots. No unsafe shader or high-resolution HDRI was added. Real MacBook/mobile hardware profiling remains needed. Vite retains its >500 kB scene-chunk warning (approximately 642 kB uncompressed / 173 kB gzip).
 
 ## Attribution
 

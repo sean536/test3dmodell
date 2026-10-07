@@ -1,4 +1,4 @@
-# FORM / WERK
+# FORMWERK
 
 A German-language editorial website for a fictional metal construction and design studio. HTML, CSS, vanilla JavaScript, Three.js and GSAP. No application framework or backend.
 
@@ -33,7 +33,8 @@ The metadata preflight reports local accessor bounds. Transformed world bounds a
 - `src/main.js`: accessible menu, category selection, inquiry text-file download, lazy scene import.
 - `src/model-inspection.js`: GLB header and JSON complexity inspection before decoding.
 - `src/scene.js`: loading, measured world bounds, normalization, lighting, GSAP sequence, scroll influence and cleanup.
-- `src/camera-path.js`: real geometry landmarks, camera/target curves, clearance, framing and timing.
+- `src/camera-path.js`: real geometry landmarks, camera/target curves, clearance, framing.
+- `src/story.js`: fictional narrative stops, hold/travel timings and caption state.
 - `src/intro.js`: identity/navigation reveal and interaction/scroll lock lifecycle.
 - `public/draco/`: decoders copied from the pinned Three.js package (its MIT license applies).
 - `tools/inspect-model.mjs`: offline metadata report.
@@ -42,11 +43,11 @@ Project, material and workshop visual fields are explicitly labeled placeholders
 
 ## Model, camera and lighting
 
-See [MODEL_REPORT.md](MODEL_REPORT.md) for the complete design. `src/camera-path.js` measures the real upper frame and treads, selects a real steel junction vertex, builds a close diagonal flight-side route, and fits the full assembly reveal. Adjust `CAMERA_DIRECTION` for route proportions and sequence timing; adjust `LIGHTING` in `src/scene.js` for lighting/exposure. The source orientation and four material texture sets are retained. No model rotation or orbit controls are used.
+See [MODEL_REPORT.md](MODEL_REPORT.md) for the complete design. `src/camera-path.js` measures the real upper frame and treads, selects a real steel junction vertex, builds a close diagonal flight-side route, and fits the full assembly reveal. Adjust `CAMERA_DIRECTION` for route proportions, and `STORY_SHOTS` in `src/story.js` for sequence timing; adjust `LIGHTING` in `src/scene.js` for lighting/exposure. The source orientation and four material texture sets are retained. No model rotation or orbit controls are used.
 
-The canvas-only film takes 11.8 seconds after model readiness. It establishes the upper-flight architecture, approaches its rail for foreground parallax, withdraws to an approach view and gently pushes into the final full-assembly composition. The same camera and canvas remain in place while the company name appears, then navigation/services/one project CTA. UI reveal takes 1.9 seconds; total opening is 13.7 seconds, excluding asset loading and hidden-tab pauses.
+The cinematic company presentation takes 22.1 seconds after model readiness. It starts canvas-only, introduces the fictional company, visits a rail junction, climbs the upper flight, visits a platform and a steel macro detail, then withdraws into the unchanged homepage camera composition. Captions appear only at stationary destinations and fade before travel. UI reveal takes 1.9 seconds; total opening is 24 seconds, excluding asset loading and hidden-tab pauses. See [STORYBOARD.md](STORYBOARD.md) for measured destinations, copy and timing.
 
-Initial HTML locks the page before JavaScript loads. `src/intro.js` keeps the body inert, hides lower sections, fixes body scrolling and captures wheel/touch/scroll-key/click input until the UI reveal is complete. It then restores interaction, section access and scrolling. There are no intro captions, skip button or scroll indicators. Reduced-motion users receive the final still composition and immediate unlock; mobile uses the same still camera fallback and a short UI reveal. GLB/WebGL failure unlocks the page with an accessible message rather than trapping the visitor. Idle and hidden/offscreen rendering stop; DPR stays at or below 1.5. No real-time shadows, post-processing, particles or HDRI downloads.
+Initial HTML locks the page before JavaScript loads. `src/intro.js` keeps the body inert, hides lower sections, fixes body scrolling and captures wheel/touch/scroll-key/click input until the UI reveal is complete. It then restores interaction, section access and scrolling. Story captions are noninteractive; there is no skip button or scroll indicator. Reduced-motion users receive the final still composition and immediate unlock; mobile uses the same still camera fallback and a short UI reveal. GLB/WebGL failure unlocks the page with an accessible message rather than trapping the visitor. Idle and hidden/offscreen rendering stop; DPR stays at or below 1.5. No real-time shadows, post-processing, particles or HDRI downloads.
 
 ## Validation and risks
 

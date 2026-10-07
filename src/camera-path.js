@@ -6,8 +6,6 @@ export const CAMERA_DIRECTION = {
   clearance: .10, // Fraction of upper-flight width, outside its left-hand steelwork.
   revealDirection: [-.85, .18, 1],
   framingMargin: 1.04, portraitFraming: 1.32,
-  segments: [2.4, 3.2, 3.4, 2.4],
-  openingHold: .4,
 };
 
 export function buildCameraPath(model, camera) {
@@ -37,11 +35,24 @@ export function buildCameraPath(model, camera) {
   const sideX = Math.min(frameBox.min.x, box.min.x);
   const vector = (x, y, z) => new THREE.Vector3(x, y, z);
   const treadAt = fraction => vector(treadBox.getCenter(new THREE.Vector3()).x, THREE.MathUtils.lerp(treadBox.min.y, treadBox.max.y, fraction), THREE.MathUtils.lerp(treadBox.max.z, treadBox.min.z, fraction));
-  const p2 = treadAt(.43); p2.set(sideX - clearance * 2.4, p2.y + railHeight * .84, p2.z);
-  const p3 = treadAt(.82); p3.set(sideX - clearance * 4.5, p3.y + railHeight, p3.z);
-  const topTarget = treadBox.getCenter(new THREE.Vector3()); topTarget.y += railHeight * .4;
-  // Open with the upper architecture, approach its real foreground rail, then arrive.
-  const establish = topTarget.clone().add(vector(-flight.x * 3.2, flight.y * .22, tread.z * .52));
+  const precision = detail.clone().add(vector(-clearance * 1.5, clearance * .2, flight.z * .026));
+  const experience = treadAt(.82); experience.set(sideX - clearance * 4.5, experience.y + railHeight, experience.z);
+  const experienceTarget = treadAt(.87); experienceTarget.y += railHeight * .28;
+  const platform = model.getObjectByName('Cube111_StairBodyPlat_0') ?? model.getObjectByName('Cube.111_StairBodyPlat_0');
+  if (!platform?.isMesh) throw Error('Expected upper landing is missing');
+  const platformBox = new THREE.Box3().setFromObject(platform, true);
+  const landing = platformBox.getSize(new THREE.Vector3());
+  const platformTarget = platformBox.getCenter(new THREE.Vector3());
+  const projects = vector(sideX - landing.x * .75, platformBox.max.y + landing.y * .35, platformBox.max.z + landing.z * .8);
+  const materialSeed = vector(platformBox.min.x, platformBox.min.y + landing.y * .66, platformBox.max.z - landing.z * .14);
+  const materialDetail = new THREE.Vector3(); nearest = Infinity;
+  const platformPositions = platform.geometry.attributes.position;
+  for (let i = 0; i < platformPositions.count; i++) {
+    point.fromBufferAttribute(platformPositions, i).applyMatrix4(platform.matrixWorld);
+    const distance = point.distanceToSquared(materialSeed);
+    if (distance < nearest) { nearest = distance; materialDetail.copy(point); }
+  }
+  const material = materialDetail.clone().add(vector(-clearance * 1.3, clearance * .15, clearance * .45));
   const direction = new THREE.Vector3(...CAMERA_DIRECTION.revealDirection).normalize();
   const target = center.clone();
   const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), direction).normalize();
@@ -59,16 +70,26 @@ export function buildCameraPath(model, camera) {
   }
   distance *= CAMERA_DIRECTION.framingMargin * (camera.aspect < 1 ? CAMERA_DIRECTION.portraitFraming : 1);
   const reveal = target.clone().addScaledVector(direction, distance);
-  const arrivalApproach = target.clone().addScaledVector(direction, distance * 1.14);
-  const points = [establish, p3, p2, arrivalApproach, reveal];
-  const t2 = treadAt(.57); t2.y += railHeight * .35;
-  const t3 = treadAt(.87); t3.y += railHeight * .28;
-  const targets = [topTarget, t3, t2, target.clone(), target];
-  const positionCurve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+  const wide = target.clone().addScaledVector(direction, distance * 1.12);
+  wide.y += size.y * .04;
+  const points = [wide, precision, experience, projects, material, reveal];
+  const targets = [target.clone(), detail.clone(), experienceTarget, platformTarget, materialDetail, target];
+  // Smoothly confine spline overshoot to the measured exterior clearance corridor.
+  // Soft minimum preserves continuous derivatives; there is no position clamp/camera cut.
+  const ceiling = box.min.x - clearance * .75;
+  const softness = clearance * .2;
+  class ExteriorCurve extends THREE.CatmullRomCurve3 {
+    getPoint(t, output = new THREE.Vector3()) {
+      super.getPoint(t, output);
+      output.x = Math.min(output.x, ceiling) - softness * Math.log1p(Math.exp(-Math.abs(output.x - ceiling) / softness));
+      return output;
+    }
+  }
+  const positionCurve = new ExteriorCurve(points, false, 'centripetal');
   const targetCurve = new THREE.CatmullRomCurve3(targets, false, 'centripetal');
   // A conservative X-plane bound guarantees camera clearance across the whole assembly.
   let minClearance = Infinity;
   for (let i = 0; i <= 512; i++) minClearance = Math.min(minClearance, box.min.x - positionCurve.getPoint(i / 512).x);
   if (minClearance <= clearance * .3) throw Error('Camera route is too close to the outer steelwork');
-  return { box, size, center, frameBox, treadBox, detail, clearance, railHeight, corners, reveal, positionCurve, targetCurve, points, targets, minClearance, near: Math.min(clearance * .025, size.length() * .0002), far: distance * 1.14 + size.length() * 2.5 };
+  return { box, size, center, frameBox, treadBox, platformBox, materialDetail, detail, clearance, railHeight, corners, reveal, positionCurve, targetCurve, points, targets, minClearance, near: Math.min(clearance * .025, size.length() * .0002), far: distance * 1.14 + size.length() * 2.5 };
 }
