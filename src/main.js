@@ -1,4 +1,5 @@
 import './style.css';
+import { intro } from './intro.js';
 
 const menu = document.querySelector('#menu');
 const navigation = document.querySelector('#navigation');
@@ -43,4 +44,5 @@ document.querySelector('#inquiry-form').addEventListener('submit', event => {
 });
 import('./scene.js').then(({ initScene }) => initScene()).catch(() => {
   document.querySelector('#model-state').textContent = 'Die 3D-Ansicht ist nicht verfügbar. Alle Inhalte bleiben zugänglich.';
+  intro.reveal({ instant: true });
 });

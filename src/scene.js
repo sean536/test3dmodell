@@ -4,6 +4,7 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { intro } from './intro.js';
 import { inspectGLB } from './model-inspection.js';
 import { buildCameraPath, CAMERA_DIRECTION } from './camera-path.js';
 
@@ -15,8 +16,6 @@ const LIGHTING = { exposure: .92, environment: .8, key: 2.6, rim: 3.2, fill: .35
 export async function initScene() {
   const container = document.querySelector('#scene');
   const state = document.querySelector('#model-state');
-  const skip = document.querySelector('#skip-intro');
-  const caption = document.querySelector('#sequence-caption');
   const hero = document.querySelector('#hero');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const mobile = matchMedia('(max-width: 700px)');
@@ -29,9 +28,9 @@ export async function initScene() {
   const resources = { geometries: new Set(), materials: new Set(), textures: new Set() };
   const cameraPosition = new THREE.Vector3();
   const cameraTarget = new THREE.Vector3();
-  let renderer, model, environment, path, timeline, skipTween, scrollTrigger;
+  let renderer, model, environment, path, timeline, scrollTrigger;
   let frame = 0, lastFrame = 0, renderCount = 0, slowFrames = 0;
-  let disposed = false, completed = false, visible = true, previewHeld = false;
+  let disposed = false, completed = false, visible = true, previewHeld = false, awaitingHomepage = false;
   let projectionShift = NaN;
   let scrollOffset = 0;
   const diagnostics = { ready: false, phase: 'loading', renderCount: 0 };
@@ -44,7 +43,7 @@ export async function initScene() {
     if (disposed) return;
     disposed = true;
     cancelAnimationFrame(frame); frame = 0;
-    skipTween?.kill(); timeline?.kill(); scrollTrigger?.kill(); observer.disconnect();
+    timeline?.kill(); scrollTrigger?.kill(); observer.disconnect();
     resources.geometries.forEach(item => item.dispose());
     resources.materials.forEach(item => item.dispose());
     resources.textures.forEach(item => item.dispose());
@@ -53,10 +52,12 @@ export async function initScene() {
     window.removeEventListener('pointermove', pointer);
     window.removeEventListener('pagehide', pageHide);
     window.removeEventListener('pageshow', synchronize);
+    window.removeEventListener('homepage-ready', homepageReady);
+    intro.dispose();
     document.removeEventListener('visibilitychange', synchronize);
     reduced.removeEventListener('change', motionPreference);
     mobile.removeEventListener('change', motionPreference);
-    skip.removeEventListener('click', skipSequence);
+
     diagnostics.ready = false; diagnostics.phase = 'disposed';
     delete window.cinematicPreview;
   }
@@ -64,12 +65,12 @@ export async function initScene() {
     dispose(); diagnostics.phase = 'fallback';
     document.body.classList.remove('has-model');
     state.hidden = false; state.textContent = message;
-    skip.hidden = true; caption.textContent = '';
+    intro.reveal({ instant: true });
     if (error) console.warn('3D presentation unavailable:', error.message);
   }
   function pageHide(event) {
     if (!event.persisted) dispose();
-    else { cancelAnimationFrame(frame); frame = 0; timeline?.pause(); skipTween?.pause(); }
+    else { cancelAnimationFrame(frame); frame = 0; timeline?.pause(); }
   }
   function resize() {
     if (!renderer || disposed) return;
@@ -83,35 +84,29 @@ export async function initScene() {
     Object.assign(diagnostics, { near: camera.near, far: camera.far, dpr: renderer.getPixelRatio(), clearance: path.minClearance, detail: path.detail.toArray(), pathPoints: path.points.map(p => p.toArray()) });
     synchronize();
   }
+  function homepageReady() { resize(); ScrollTrigger.refresh(); synchronize(); }
   function pointer(event) {
-    if (!completed || reduced.matches || mobile.matches) return;
+    if (!intro.unlocked || !completed || reduced.matches || mobile.matches) return;
     mouse.set((event.clientX / innerWidth - .5) * .012, (event.clientY / innerHeight - .5) * .008);
     synchronize();
   }
   function finish() {
+    if (!completed) awaitingHomepage = true;
     completed = true; motion.progress = 1;
-    skip.hidden = true; caption.textContent = '';
-    document.body.classList.add('intro-ended');
-    diagnostics.phase = reduced.matches || mobile.matches ? 'still' : 'reveal';
     synchronize();
   }
-  function skipSequence() {
-    if (!timeline || completed) return;
-    skipTween?.kill();
-    skipTween = timeline.tweenTo(timeline.duration(), { duration: 2, ease: 'sine.inOut', onComplete: () => { skipTween = null; } });
-  }
   function motionPreference() {
-    if (reduced.matches || mobile.matches) { skipTween?.kill(); skipTween = null; timeline?.pause(); mouse.set(0, 0); offset.set(0, 0); scrollOffset = 0; finish(); }
+    if (reduced.matches || mobile.matches) { timeline?.pause(); mouse.set(0, 0); offset.set(0, 0); scrollOffset = 0; awaitingHomepage = true; finish(); }
     projectionShift = NaN;
     synchronize();
   }
   function synchronize() {
     if (!renderer || !path || disposed) return;
     const active = !document.hidden && visible;
-    if (!active) { cancelAnimationFrame(frame); frame = 0; lastFrame = 0; timeline?.pause(); skipTween?.pause(); diagnostics.paused = true; return; }
+    if (!active) { cancelAnimationFrame(frame); frame = 0; lastFrame = 0; timeline?.pause(); diagnostics.paused = true; return; }
     diagnostics.paused = false;
     if (!completed && !previewHeld && !reduced.matches && !mobile.matches) {
-      if (skipTween) skipTween.resume(); else timeline?.resume();
+      timeline?.resume();
     }
     if (!frame) frame = requestAnimationFrame(render);
   }
@@ -121,7 +116,7 @@ export async function initScene() {
     const still = reduced.matches || mobile.matches;
     const delta = Math.min(now - lastFrame || 16, 100); lastFrame = now;
     offset.lerp(still ? new THREE.Vector2() : mouse, 1 - Math.exp(-delta / 250));
-    const desiredScroll = still ? 0 : motion.scroll;
+    const desiredScroll = still || !intro.unlocked ? 0 : motion.scroll;
     scrollOffset = THREE.MathUtils.lerp(scrollOffset, desiredScroll, 1 - Math.exp(-delta / 300));
     path.positionCurve.getPoint(motion.progress, cameraPosition);
     path.targetCurve.getPoint(motion.progress, cameraTarget);
@@ -135,10 +130,9 @@ export async function initScene() {
       camera.setViewOffset(container.clientWidth, container.clientHeight, -container.clientWidth * shift, still && camera.aspect < 1 ? container.clientHeight * .10 : 0, container.clientWidth, container.clientHeight);
       projectionShift = shift;
     }
-    caption.textContent = !still && !completed ? (motion.progress > .16 && motion.progress < .24 ? 'STRUKTUR.' : motion.progress > .43 && motion.progress < .5 ? 'PRÄZISION.' : '') : '';
-    document.body.classList.toggle('intro-ended', motion.progress > .86 || completed);
     const start = performance.now(); renderer.render(scene, camera);
     const renderMs = performance.now() - start;
+    if (awaitingHomepage) { awaitingHomepage = false; intro.reveal({ instant: reduced.matches }); }
     slowFrames = renderMs > 90 ? slowFrames + 1 : Math.max(0, slowFrames - 1);
     Object.assign(diagnostics, { renderCount: ++renderCount, progress: motion.progress, completed, position: camera.position.toArray(), target: cameraTarget.toArray(), drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, textures: renderer.info.memory.textures, renderSubmitMs: renderMs, phase: still ? 'still' : completed ? 'reveal' : 'film' });
     if (slowFrames > 12) { fail('Die 3D-Ansicht wurde aus Leistungsgründen pausiert. Alle Inhalte bleiben verfügbar.'); return; }
@@ -210,24 +204,24 @@ export async function initScene() {
     scene.add(new THREE.HemisphereLight('#d3d7cc', '#111210', LIGHTING.fill));
     gsap.registerPlugin(ScrollTrigger);
     resize();
-    diagnostics.ready = true; state.hidden = true; document.body.classList.add('has-model');
+    diagnostics.ready = true; state.hidden = true; document.body.classList.add('has-model'); intro.start();
     if (reduced.matches || mobile.matches) finish();
     else {
-      skip.hidden = false; timeline = gsap.timeline({ paused: true, onComplete: finish });
+      timeline = gsap.timeline({ paused: true, onComplete: finish });
       timeline.to(motion, { progress: 0, duration: CAMERA_DIRECTION.openingHold });
       CAMERA_DIRECTION.segments.forEach((duration, index) => timeline.to(motion, { progress: (index + 1) / CAMERA_DIRECTION.segments.length, duration, ease: 'sine.inOut' }));
     }
-    scrollTrigger = ScrollTrigger.create({ trigger: hero, start: 'top top', end: 'bottom top', onUpdate: self => { motion.scroll = reduced.matches ? 0 : self.progress; synchronize(); } });
+    scrollTrigger = ScrollTrigger.create({ trigger: hero, start: 'top top', end: 'bottom top', onUpdate: self => { motion.scroll = reduced.matches || !intro.unlocked ? 0 : self.progress; synchronize(); } });
     observer.observe(hero);
     window.addEventListener('resize', resize);
     window.addEventListener('pointermove', pointer, { passive: true });
     window.addEventListener('pagehide', pageHide); window.addEventListener('pageshow', synchronize);
     document.addEventListener('visibilitychange', synchronize);
     reduced.addEventListener('change', motionPreference); mobile.addEventListener('change', motionPreference);
-    skip.addEventListener('click', skipSequence);
+    window.addEventListener('homepage-ready', homepageReady);
     if (import.meta.env.DEV) window.cinematicPreview = {
-      seek(progress) { previewHeld = true; skipTween?.kill(); skipTween = null; timeline?.pause(); motion.progress = THREE.MathUtils.clamp(progress, 0, 1); completed = motion.progress === 1; synchronize(); },
-      resume() { previewHeld = false; if (!completed) timeline?.resume(); synchronize(); },
+      seek(progress) { previewHeld = true; timeline?.pause(); motion.progress = THREE.MathUtils.clamp(progress, 0, 1); completed = motion.progress === 1; if (completed) awaitingHomepage = true; synchronize(); },
+      resume() { previewHeld = false; awaitingHomepage = false; if (!completed) timeline?.resume(); synchronize(); },
     };
     console.info('Measured staircase GLB:', stats);
     synchronize();
