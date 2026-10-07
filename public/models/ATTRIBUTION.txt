@@ -1,0 +1,10 @@
+Staircase Modular Frame - Steel
+Author: brandon_grey (Brandon Grey)
+Author profile: https://sketchfab.com/brandondmc10
+Source: https://sketchfab.com/3d-models/staircase-modular-frame-steel-c4c326966b4a43c88ad50f5da52d0df9
+License: Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+
+This website uses the optimized GLB supplied by the user. Its bytes are retained unchanged.
+Presentation changes at runtime: centering/normalization, reduced normal-map strength,
+studio lighting, designed camera movement. No model geometry or texture images were replaced.
